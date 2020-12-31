@@ -34,5 +34,8 @@ public class Consumer {
     // 由于qos默认为1，所以这个方法只会进来一次，直到这个消费者确认或者拒绝了消息。
     // 设置qos可以在配置文件里设置对应的参数 prefetch=xx
     // channel.basicReject(tag, false);
+
+//    channel.addConfirmListener();
+//    channel.addReturnListener();
   }
 }

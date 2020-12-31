@@ -1,15 +1,14 @@
 package com.zysaaa;
 
-import org.springframework.amqp.core.AmqpTemplate;
-import org.springframework.amqp.core.Binding;
-import org.springframework.amqp.core.BindingBuilder;
-import org.springframework.amqp.core.Queue;
-import org.springframework.amqp.core.TopicExchange;
+import org.springframework.amqp.core.*;
+import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
@@ -35,11 +34,14 @@ public class Config {
   public static final String ASYNC_RECEIVE_ROUTING_KEY = "asyncreceive.routing_key";
   public static final String ASYNC_TEMPLATE_ROUTING_KEY = "asynctemplate.routing_key";
 
+  public static final String RECEIVE_QUEUE_NAME = "receive_queue_name";
 
 
   @Bean
   public AmqpTemplate amqpTemplate(@Autowired ConnectionFactory amqpConnectionFactory) {
     RabbitTemplate rabbitTemplate = new RabbitTemplate(amqpConnectionFactory);
+    rabbitTemplate.setReplyAddress(RECEIVE_QUEUE_NAME);
+    rabbitTemplate.setReceiveTimeout(30000);
     rabbitTemplate.setMessageConverter(jsonMessageConverter());
     return rabbitTemplate;
   }
@@ -113,4 +115,29 @@ public class Config {
     return BindingBuilder.bind(asyncReceiveQueue()).to(asyncExchange()).with("asyncreceive.*");   // 转发routingkey格式为 async.* 的信息。
   }
 
+  //*******************************  RPC设置异步接收队列  ******************************
+
+  @Bean
+  public  Queue receiveQueue(){
+    return new Queue(RECEIVE_QUEUE_NAME);
+  }
+
+  /**
+   * 接收队列 与发送队列 需绑定同一交换机 且 routingKey 一致
+   * @return
+   */
+  @Bean
+  public Binding bindingAsync2() {
+    return BindingBuilder.bind(receiveQueue()).to(asyncExchange()).with("async.*");
+  }
+
+  @Bean
+  public SimpleMessageListenerContainer createReplyListenerContainer(@Autowired ConnectionFactory amqpConnectionFactory) {
+    SimpleMessageListenerContainer listenerContainer = new SimpleMessageListenerContainer();
+    listenerContainer.setConnectionFactory(amqpConnectionFactory);
+    listenerContainer.setAcknowledgeMode(AcknowledgeMode.AUTO);
+    listenerContainer.setQueueNames(RECEIVE_QUEUE_NAME);
+    listenerContainer.setMessageListener(amqpTemplate(amqpConnectionFactory));
+    return listenerContainer;
+  }
 }
